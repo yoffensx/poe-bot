@@ -35,8 +35,8 @@
 
 ### Ключевые принципы
 
-- **External only** — никакой инъекции в процесс игры
-- **Pixel-based** — только screen capture, никакого чтения памяти
+- **Dual-mode** — `external` (OCR/CV, по умолчанию) или `internal` (manual-mapped DLL + shared memory)
+- **Pixel-based fallback** — внешний режим использует только screen capture, никакого чтения памяти
 - **Build-aware** — всё поведение диктует `build_config.toml`
 - **Humanized input** — кривые Безье, gaussian jitter, случайные паузы
 
@@ -44,37 +44,47 @@
 
 ## Архитектура
 
+### Режимы работы
+
+| Режим | Источник данных | Риск детекта | Применение |
+|-------|----------------|-------------|-----------|
+| **external** | DXGI capture + OCR/CV | низкий | фарм-бот, **по умолчанию** |
+| **internal** | manual-mapped DLL + shared memory | средний | точные HP/coords, fast reaction |
+| **hybrid** | internal GameState + external для UI | средний | оптимальный баланс |
+
+Режим задаётся в `build_config.toml`: `[bot] mode = "external" | "internal" | "hybrid"`
+
+### Диаграмма слоёв
+
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        CONFIG LAYER                             │
-│  build_config.toml · mod_database.toml · loot_filter.toml      │
-│  reward_priorities.toml · debuff_weights.toml                   │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────────┐
-│                     CAPTURE LAYER (C++ DLL)                     │
-│  DXGI Desktop Duplication API → raw frames → shared memory      │
-└──────────────────────┬─────────────────────────────────────────┘
-                       │  numpy array via ctypes
-┌──────────────────────▼─────────────────────────────────────────┐
-│                   VISION LAYER (Python + OpenCV)                │
-│  OCREngine · MinimapParser · UIParser · LootScanner             │
-└────┬────────────┬────────────┬──────────┬────────────────────┘
-     │            │            │          │
-     ▼            ▼            ▼          ▼
-ModAnalyzer  RewardPicker  RoomScanner  LootFilter
-     │            │            │          │
-     └────────────┴─────┬──────┘──────────┘
-                        ▼
-┌───────────────────────────────────────────────────────────────┐
-│                   DECISION ENGINE (FSM)                        │
-│  Idle→MapSelect→ModCheck→Running→Looting→Rewarding→Stashing   │
-└───────────────────────────┬───────────────────────────────────┘
-                            ▼
-┌───────────────────────────────────────────────────────────────┐
-│                  INPUT LAYER (C++ DLL)                         │
-│  BezierMouse · GaussianJitter · HumanizedKeyboard              │
-└───────────────────────────────────────────────────────────────┘
+                     [configs/*.toml]
+                           │
+                     [src/config/]         ← Pydantic v2 schema
+                           │
+          ┌────────────────┼────────────────┐
+          │                │                │
+  ══ EXTERNAL ══    ══ INTERNAL ══          ▼
+          │                │        [src/analyzers/]
+ [cpp/capture/]   [cpp/loader/]      pure functions
+ DXGI → frame     manual mapper      mod/reward/debuff
+          │                │
+          ▼                ▼
+ [src/vision/]   [cpp/internal/]
+ OCR / CV         payload DLL
+ HP, minimap,     AOB scan → read
+ loot, UI         HP, coords, mobs
+          │                │
+          └────────┬────────┘
+                   ▼
+     [src/capture/capture_service.py]
+     unified GameState (any mode)
+                   │
+                   ▼
+         [src/logic/]          ← FSM, A*, combat, loot
+                   │
+         [src/input/]          ← humanized SendInput
+                   │
+         [cpp/input/]          ← Bezier + jitter DLL
 ```
 
 **Подробнее:** [`docs/architecture/overview.md`](docs/architecture/overview.md)
@@ -102,7 +112,10 @@ ModAnalyzer  RewardPicker  RoomScanner  LootFilter
 ```
 poe2-bot/
 ├── src/
-│   ├── capture/          # Python-обёртка над C++ DXGI DLL
+│   ├── capture/
+│   │   ├── capture.py            # Python-обёртка над C++ DXGI DLL
+│   │   ├── capture_service.py    # Unified GameState (external|internal|hybrid)
+│   │   └── internal_bridge.py    # Shared memory reader (internal mode)
 │   ├── vision/           # OpenCV: HP, minimap, loot, UI
 │   │   ├── ocr.py
 │   │   ├── minimap.py
@@ -127,7 +140,9 @@ poe2-bot/
 │       └── schema.py
 ├── cpp/
 │   ├── capture/          # DXGI Desktop Duplication DLL
-│   └── input/            # Humanized input DLL
+│   ├── input/            # Humanized input DLL (Bezier + jitter)
+│   ├── loader/           # Manual map loader (direct syscalls, no PEB trace)
+│   └── internal/         # Payload DLL (AOB scan, shared memory writer)
 ├── configs/
 │   ├── build_configs/
 │   │   └── lightning_arrow.toml
@@ -282,11 +297,20 @@ uv run pytest --cov=src --cov-report=html
 
 ## Безопасность
 
+**External mode (default):**
 - Бот **не инжектирует** код в процесс PoE2
 - Бот **не читает память** процесса PoE2
 - Все взаимодействия — screen capture + SendInput
+
+**Internal mode (opt-in):**
+- Manual-mapped DLL без следов в PEB module list
+- Только **read** из памяти процесса, никаких write в игровую логику
+- Данные передаются через named shared memory → Python, нет прямой связи
+- Direct syscalls (Hell's Gate), затёртый PE-заголовок, нет экспортов
+
+**Общее:**
 - Humanizer минимизирует детектируемость паттернов ввода
-- Используй в тестовых/offline-сессиях на своё усмотрение
+- Используй на своё усмотрение
 
 **Использование бота нарушает ToS GGG. Ответственность за последствия несёт пользователь.**
 
@@ -299,3 +323,4 @@ uv run pytest --cov=src --cov-report=html
 | [ADR-0001](docs/adr/ADR-0001-external-architecture.md) | Выбор External-архитектуры |
 | [ADR-0002](docs/adr/ADR-0002-python-cpp-split.md) | Python + C++ DLL разделение |
 | [ADR-0003](docs/adr/ADR-0003-pixel-based-vision.md) | Pixel-based вместо memory reading |
+| [ADR-0004](docs/adr/ADR-0004-internal-mode-manual-map.md) | Internal mode — manual map + shared memory IPC |
