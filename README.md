@@ -166,7 +166,7 @@ poe2-bot/
 
 ```bash
 # Клонировать
-git clone https://github.com/your/poe2-bot
+git clone https://github.com/<owner>/poe2-bot
 cd poe2-bot
 
 # Создать окружение и установить зависимости

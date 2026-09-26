@@ -143,9 +143,10 @@ extern "C" {
 Python-сторона (`src/capture/capture.py`):
 ```python
 lib = ctypes.CDLL("poe2_capture.dll")
-buf = (ctypes.c_uint8 * (1920 * 1080 * 4))()
+# размеры берём из калибровки (ui_regions.toml), а не хардкодим
+buf = (ctypes.c_uint8 * (width * height * 4))()
 lib.grab_frame(buf, ctypes.byref(stride))
-frame = np.frombuffer(buf, dtype=np.uint8).reshape(1080, 1920, 4)
+frame = np.frombuffer(buf, dtype=np.uint8).reshape(height, width, 4)
 ```
 
 ### `poe2_input.dll`

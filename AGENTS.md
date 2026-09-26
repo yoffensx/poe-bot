@@ -12,7 +12,7 @@
 
 - **Язык:** Python 3.12 (логика) + C++ (DXGI capture, input humanizer)
 - **Obsidian Project:** `poe-bot`
-- **Репозиторий:** `D:\git\poe-bot`
+- **Репозиторий:** корень этого git-репозитория (ветка `master`)
 
 ---
 
@@ -111,7 +111,8 @@ logic → stash (inventory operations)
 ## Workflow для агента
 
 1. `obsidian-todo__get_project_overview(project="poe-bot")` — текущие задачи
-2. Взять задачу → `update_task(column="In Progress")`
-3. Работать строго по ADR-ограничениям
-4. `uv run ruff check src/ && uv run mypy src/ && uv run pytest tests/unit/`
-5. `obsidian-todo__finalize_task(id, summary)` → закрыть задачу
+2. План работ: `docs/roadmap.md`, карточки: `docs/tasks/{todo,in-progress,done}/` (зеркало Obsidian)
+3. Взять задачу → `update_task(column="In Progress")` + перенести файл в `docs/tasks/in-progress/`
+4. Работать строго по ADR-ограничениям
+5. `uv run ruff check src/ && uv run mypy src/ && uv run pytest tests/unit/`
+6. `obsidian-todo__finalize_task(id, summary)` → закрыть задачу + перенести карточку в `docs/tasks/done/`
