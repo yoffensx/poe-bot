@@ -1,5 +1,19 @@
 # Architecture — Full System Overview
 
+## Режимы работы
+
+```
+build_config.toml → [bot] mode = "external" | "internal" | "hybrid"
+```
+
+| Режим | Данные | Риск | Применение |
+|-------|--------|------|-----------|
+| **external** | DXGI capture + OCR/CV | низкий | фарм-бот, default |
+| **internal** | manual-mapped DLL + shared memory | средний | точные HP/coords |
+| **hybrid** | internal GameState + external для UI | средний | оптимальный баланс |
+
+---
+
 ## Stack
 
 | Layer | Tech | Notes |
@@ -10,6 +24,8 @@
 | Logic / FSM | Python + transitions | States: Idle→MapSelect→Running→... |
 | Config | TOML + Pydantic v2 | Strict typing, no hardcodes |
 | Input | C++ DLL (Bezier + jitter) | SendInput, upgradeable to KMBox |
+| Internal Loader | C++ / direct syscalls | Manual map, NtCreateThreadEx |
+| Shared Memory IPC | mmap / named mapping | Payload → Python bridge |
 | Build | uv + CMake/MSVC | Python env + C++ DLL |
 
 ---
@@ -17,22 +33,34 @@
 ## Layer Dependency Graph
 
 ```
-                    [configs/*.toml]
-                          │
-                    [src/config/]       ← Pydantic v2 schema + loader
-                          │
-         ┌────────────────┼────────────────┐
-         ▼                ▼                ▼
-  [cpp/capture/]   [src/vision/]    [src/analyzers/]
-  DXGI → frame     OCR / CV         Pure functions
-         │                │
-         └────────┬────────┘
-                  ▼
-          [src/logic/]               ← FSM, A*, combat, loot
-                  │
-          [src/input/]               ← humanized SendInput
-                  │
-          [cpp/input/]               ← Bezier + jitter DLL
+                         [configs/*.toml]
+                               │
+                         [src/config/]         ← Pydantic v2 schema + loader
+                               │
+            ┌──────────────────┼──────────────────┐
+            │                  │                  │
+    ════ EXTERNAL ════  ════ INTERNAL ════         │
+            │                  │                  ▼
+  [cpp/capture/]      [cpp/loader/]      [src/analyzers/]
+  DXGI → frame        manual mapper       Pure functions
+            │                  │          (mod/reward/debuff)
+            ▼                  ▼
+  [src/vision/]       [cpp/internal/]
+  OCR / CV            payload DLL
+  HP, minimap,        AOB scan → read
+  loot, UI            HP,coords,mobs
+            │                  │
+            └─────────┬─────────┘
+                      ▼
+           [src/capture/capture_service.py]
+           unified GameState (external | internal | hybrid)
+                      │
+                      ▼
+             [src/logic/]          ← FSM, A*, combat, loot
+                      │
+             [src/input/]          ← humanized SendInput
+                      │
+             [cpp/input/]          ← Bezier + jitter DLL
 ```
 
 ---

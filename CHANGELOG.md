@@ -9,13 +9,18 @@
 ## [Unreleased]
 
 ### Planned
-- `src/config/loader.py` — загрузка `BotConfig` из TOML
-- `src/analyzers/mod_analyzer.py` — core ModAnalyzer с fuzzy matching
-- `src/analyzers/reward_picker.py` — RewardPicker с build_tags
-- `src/analyzers/debuff_picker.py` — DebuffPicker (min pain strategy)
-- `cpp/capture/` — DXGI Desktop Duplication DLL
-- `cpp/input/` — Bezier mouse + humanized keyboard DLL
-- `tools/calibrator/` — интерактивный UI-калибратор
+
+#### Internal Mode (новый — ADR-0004)
+- `cpp/loader/mapper.cpp` — Manual Map Loader (NtCreateThreadEx, PE reloc, hash imports) · `#61a5e650`
+- `cpp/internal/payload.cpp` — Payload DLL (AOB scan, GameState → SharedMemory, 30Hz) · `#417c5de2`
+- `src/capture/internal_bridge.py` — Python mmap reader · `#1db34de8`
+- `src/capture/capture_service.py` — unified GameState (external|internal|hybrid) · `#1db34de8`
+
+#### Core Logic
+- `src/config/loader.py` + Analyzers (ModAnalyzer, RewardPicker, DebuffPicker) · `#0558f2e9`
+- `cpp/capture/` DXGI DLL + `cpp/input/` Humanized Input DLL · `#f8f7855e`
+- Vision layer: OCR, Minimap, LootScanner, UIParser, HPMonitor · `#de09c158`
+- BotFSM + A\* + Combat + LootFilter + StashManager · `#22f73dae`
 
 ---
 
