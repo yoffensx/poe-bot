@@ -90,3 +90,14 @@ es_flask_threshold = 0.50
 # ─────────────────────────────────────────────
 [build_tags]
 tags = ["bow", "projectile", "lightning", "crit", "attack"]
+
+# ─────────────────────────────────────────────
+# Bot runtime mode
+# ─────────────────────────────────────────────
+[bot]
+mode = "internal"         # "internal" | "external"
+poe2_pid = 0              # 0 = автоопределение через psutil
+instance_id = 0           # 0 = использовать poe2_pid
+inject_delay_s = 5.0      # секунд ждать после старта PoE2 перед инжектом
+loader_path = "cpp/build/Release/poe2_loader.exe"
+payload_path = "cpp/build/Release/poe2_payload.dll"

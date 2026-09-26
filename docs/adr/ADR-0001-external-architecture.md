@@ -1,52 +1,52 @@
-# ADR-0001: Выбор External-архитектуры бота
+# ADR-0001: Выбор базовой архитектуры (Эволюция: External → Internal Headless Farm)
 
-- **Статус:** Принято
-- **Дата:** 2026-09-26
+- **Статус:** Заменено на [ADR-0004](ADR-0004-internal-mode-manual-map.md) (Superseded)
+- **Дата обновления:** 2026-09-27
+- **Первоначальная дата:** 2026-09-26
 - **Авторы:** Maik
 
 ---
 
-## Контекст
+## Контекст и эволюция требований
 
-Path of Exile 2 использует собственный лёгкий клиентский античит без ring-0 драйвера.  
-Защита строится на:
-- Проверках целостности памяти процесса
-- Базовом обнаружении инъекций (WriteProcessMemory, remote thread creation)
-- Серверной телеметрии паттернов ввода (скорость кликов, регулярность действий)
-- Скриншотах и сравнении рендера
+Изначально проект задумывался как внешний (External) бот на 1 окно с захватом экрана через DXGI и чтением интерфейса через Tesseract OCR / OpenCV.
 
-Основная поверхность детектирования — серверная телеметрия поведения, а не ring-0 kernel callbacks.
+Однако ключевое боевое требование проекта изменилось: **развёртывание крупномасштабных бот-ферм на выделенных серверах (сотни параллельных ботов на одной машине)**.
+
+### Почему чистый External (OCR/CV) не подходит для ферм:
+1. **GPU/CPU бутылочное горлышко:** DXGI Desktop Duplication и захват кадра требуют активного оконного композитора Windows (DWM), выделения видеопамяти под буферы и рендера игры (даже в фоне).
+2. **CPU-нагрузка OCR:** Tesseract при 30 FPS даже на ROI потребляет ощутимую долю ядра CPU. 100 окон с OCR потребуют серверных мощностей суперкомпьютера.
+3. **Невозможность Zero-Render:** Для OCR игре обязательно нужно физически рендерить полигоны, текстуры и шрифты. В headless/no-render окружении пикселей нет.
+4. **Задержка:** OCR вносит латентность 15-30ms на каждый чих против <1ms прямого чтения GameState.
+
+---
 
 ## Решение
 
-**Использовать строго External-архитектуру:**
+1. **Internal Mode (Manual Map Injection + Direct Syscalls + Headless GameState) принят как ЕДИНСТВЕННЫЙ ЦЕЛЕВОЙ СТАНДАРТ (SSOT) для боевых ферм.** Подробности архитектуры зафиксированы в [ADR-0004](ADR-0004-internal-mode-manual-map.md).
+2. **External (OCR/Pixel-based) переведён в статус `DEPRECATED / LEGACY FALLBACK`:**
+   - Код vision/ocr сохраняется исключительно как резервный вариант на случай экстренных тестов единичных окон.
+   - Во всех боевых конфигурациях по умолчанию активен `mode = "internal"`.
+3. **Клиенты PoE2 запускаются в режиме минимального / подавленного рендера (no-render / headless):**
+   - Все данные об игроке (HP, MP, ES, позиция), окружении (монстры, их HP и типы), модах карты и инвентаре считываются stealth payload DLL напрямую из структур игры и публикуются в изолированные сегменты shared memory (`Local\poe2_gs_<pid>`).
 
-- Screen capture через DXGI Desktop Duplication API (захват compositor, не хук D3D)
-- Ввод через SendInput / driver-level device (KMBox/VmMulti опционально)
-- Никакого `OpenProcess` с `PROCESS_VM_READ` к `PathOfExile2.exe`
-- Никаких инъекций (LoadLibrary, manual map, APC, etc.)
-- Никаких хуков D3D/DirectInput/RawInput внутри процесса игры
+---
 
-## Обоснование
+## Сравнение
 
-| Вариант | Pros | Cons |
-|---------|------|------|
-| **External (выбрано)** | Нет intra-process footprint, нет инъекций, обходит integrity checks | Не читает память → OCR/CV сложнее |
-| Internal (DLL injection) | Прямой доступ к game state, быстрее | Детектируется integrity checks, CreateRemoteThread ban-wave |
-| Kernel driver | Полный доступ, невидимость от юзерленда | GGG может добавить ring-0 AC в любой патч; огромный риск |
-| Memory reading (external) | Точные данные без OCR | `OpenProcess(PROCESS_VM_READ)` — стандартная точка детектирования |
+| Критерий | External (OCR / DXGI) | Internal (Manual Map + Shm) — ВЫБРАНО |
+|---|---|---|
+| **Масштабирование на сервер** | 2-4 окна максимум (лимит GPU/DWM) | **100+ окон на сервер (zero-render)** |
+| **Потребление CPU на инстанс** | Высокое (OCR + CV) | Минимальное (<0.5% CPU на поток shm) |
+| **Рендер графики** | Обязателен | **Не требуется (полный headless)** |
+| **Латентность данных** | 20-40 ms | **< 1 ms (direct memory read)** |
+| **Точность данных** | Эвристическая (пиксели, % орбы) | 100% точные координаты и числа |
+| **Античит-профиль** | Внешний ввод | Direct syscalls, зачищенный PEB, нет write |
 
-External + Pixel-based — наиболее устойчивый вариант при текущей защите GGG.  
-При добавлении GGG ring-0 драйвера — External остаётся рабочим без изменений архитектуры.
-
-## Последствия
-
-- Vision layer должен быть достаточно robust для чтения всей нужной информации из пикселей
-- OCR должен точно читать текст модов, имён итемов, чисел HP/MP
-- Скорость OCR и CV критична — frame processing < 33ms (30 FPS бота)
-- DXGI Duplication API требует C++ реализации (оборачивается Python DLL-binding)
+---
 
 ## Связанные ADR
 
-- ADR-0002: Python + C++ DLL split
-- ADR-0003: Pixel-based vision
+- [ADR-0004: Internal Mode — Manual Map Injection & Headless GameState](ADR-0004-internal-mode-manual-map.md) (Действующий SSOT)
+- [ADR-0002: Python + C++ DLL разделение](ADR-0002-python-cpp-split.md)
+- [ADR-0003: Pixel-based vision (Deprecated)](ADR-0003-pixel-based-vision.md)

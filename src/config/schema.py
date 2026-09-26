@@ -2,17 +2,24 @@
 Pydantic v2 schema для всех TOML-конфигов poe2-bot.
 Загрузка: src/config/loader.py
 """
+
 from __future__ import annotations
 
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Enums
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+class CaptureMode(StrEnum):
+    INTERNAL = "internal"
+    EXTERNAL = "external"
+
 
 class DamageType(StrEnum):
     PHYSICAL = "physical"
@@ -44,6 +51,7 @@ class LootAction(StrEnum):
 # ─────────────────────────────────────────────────────────────────────────────
 # Build Config
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class CharacterConfig(BaseModel):
     name: str
@@ -130,12 +138,13 @@ class BuildConfig(BaseModel):
 # Mod Database
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class ModEntry(BaseModel):
     pattern: str
     category: ModCategory
     action: ModAction = ModAction.ALLOW
     reason: str = ""
-    condition: str | None = None   # Python-expr evaluated against BuildConfig fields
+    condition: str | None = None  # Python-expr evaluated against BuildConfig fields
     weight: int = 0
 
 
@@ -146,6 +155,7 @@ class ModDatabase(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 # Reward Priorities
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class RewardEntry(BaseModel):
     name: str
@@ -167,6 +177,7 @@ class RewardPrioritiesConfig(BaseModel):
 # Debuff Weights
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class DebuffEntry(BaseModel):
     pattern: str
     pain_score: int = Field(ge=0, le=100)
@@ -186,6 +197,7 @@ class DebuffWeightsConfig(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────────
 # Loot Filter
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class LootCondition(BaseModel):
     field: str
@@ -211,16 +223,37 @@ class LootFilterConfig(BaseModel):
     defaults: LootDefaults = Field(default_factory=LootDefaults)
 
     @model_validator(mode="after")
-    def sort_rules_by_priority(self) -> "LootFilterConfig":
+    def sort_rules_by_priority(self) -> LootFilterConfig:
         self.rules = sorted(self.rules, key=lambda r: r.priority, reverse=True)
         return self
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bot Runtime (Internal / External mode)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class BotRuntimeConfig(BaseModel):
+    mode: CaptureMode = CaptureMode.INTERNAL
+    # PID PoE2 процесса (0 = автоопределение через psutil при старте)
+    poe2_pid: int = Field(default=0, ge=0)
+    # instance_id для shm-имени (0 = использовать poe2_pid)
+    instance_id: int = Field(default=0, ge=0)
+    # Путь к loader.exe (относительно корня репозитория)
+    loader_path: Path = Path("cpp/build/Release/poe2_loader.exe")
+    # Путь к payload DLL
+    payload_path: Path = Path("cpp/build/Release/poe2_payload.dll")
+    # Задержка инжекта после старта (сек), чтобы PoE2 успел загрузиться
+    inject_delay_s: float = Field(default=5.0, ge=0.0, le=60.0)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Root config bundle (всё в одном месте)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class BotConfig(BaseModel):
+    bot: BotRuntimeConfig = Field(default_factory=BotRuntimeConfig)
     build: BuildConfig
     mods: ModDatabase
     rewards: RewardPrioritiesConfig

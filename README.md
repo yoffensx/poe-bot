@@ -1,326 +1,186 @@
 # poe2-bot
 
-> **Path of Exile 2 — Smart Map Runner Bot**  
-> Внешний бот (External Architecture) для автоматизации Map-циклов с умным анализом модов, выбором наград/дебафов и смарт-лутом под конкретный билд.
+> **Path of Exile 2 — High-Performance Internal Headless Bot Farm**  
+> Промышленная архитектура для масштабирования бот-ферм на выделенных серверах (**десятки и сотни параллельных ботов на одной машине**) в режиме полного подавления рендера (**Zero-Render Headless**).
 
 ---
 
-## Содержание
+## Ключевая концепция
 
-- [Обзор](#обзор)
-- [Архитектура](#архитектура)
-- [Стек технологий](#стек-технологий)
-- [Структура проекта](#структура-проекта)
-- [Быстрый старт](#быстрый-старт)
-- [Конфигурация](#конфигурация)
-- [Модули](#модули)
-- [Разработка](#разработка)
-- [Тестирование](#тестирование)
-- [Безопасность](#безопасность)
+Бот спроектирован для максимальной производительности и плотности инстансов:
+- **Internal Mode First (SSOT):** Stealth Manual-Mapped DLL внедряется в процесс `PathOfExile2.exe` через прямые системные вызовы (Hell's Gate / Halo's Gate direct syscalls).
+- **Zero-Render (Без рендера):** Клиенты игры запускаются без прорисовки полигонов и текстур. Бот не использует захват экрана и не грузит GPU/VRAM.
+- **Ultra-low latency (<1 ms):** Состояние игры (HP, Mana, ES, координаты игрока и монстров, моды, инвентарь) передается в Python через партиционированную named shared memory (`Local\poe2_gs_<pid>`).
+- **Сотни ботов на сервере:** За счет отсутствия GPU-рендера и нулевой нагрузки на OCR один мощный сервер способен обслуживать 50-100+ параллельных окон.
+- **External (OCR/CV):** Переведён в статус **Deprecated / Legacy Fallback**. В боевой эксплуатации отключен для исключения оверхеда.
 
 ---
 
-## Обзор
-
-Бот реализует полный цикл Map-фарма в PoE2:
-
-1. **Анализ модов карты** — классификация аффиксов как опасные/плохие/нейтральные/хорошие под билд
-2. **Skip/Run решение** — автоматический пропуск опасных карт
-3. **Автонавигация** — A* по минимапу, обход комнат
-4. **Combat loop** — ротация скиллов, автопоушн
-5. **Выбор наград** — приоритизация под билд
-6. **Выбор дебафов** — минимизация потерь
-7. **Смарт-лут** — pickup только ценного под билд
-8. **Stash management** — автораскладка по вкладкам
-
-### Ключевые принципы
-
-- **Dual-mode** — `external` (OCR/CV, по умолчанию) или `internal` (manual-mapped DLL + shared memory)
-- **Pixel-based fallback** — внешний режим использует только screen capture, никакого чтения памяти
-- **Build-aware** — всё поведение диктует `build_config.toml`
-- **Humanized input** — кривые Безье, gaussian jitter, случайные паузы
-
----
-
-## Архитектура
-
-### Режимы работы
-
-| Режим | Источник данных | Риск детекта | Применение |
-|-------|----------------|-------------|-----------|
-| **external** | DXGI capture + OCR/CV | низкий | фарм-бот, **по умолчанию** |
-| **internal** | manual-mapped DLL + shared memory | средний | точные HP/coords, fast reaction |
-| **hybrid** | internal GameState + external для UI | средний | оптимальный баланс |
-
-Режим задаётся в `build_config.toml`: `[bot] mode = "external" | "internal" | "hybrid"`
-
-### Диаграмма слоёв
+## Архитектура системы
 
 ```
-                     [configs/*.toml]
-                           │
-                     [src/config/]         ← Pydantic v2 schema
-                           │
-          ┌────────────────┼────────────────┐
-          │                │                │
-  ══ EXTERNAL ══    ══ INTERNAL ══          ▼
-          │                │        [src/analyzers/]
- [cpp/capture/]   [cpp/loader/]      pure functions
- DXGI → frame     manual mapper      mod/reward/debuff
-          │                │
-          ▼                ▼
- [src/vision/]   [cpp/internal/]
- OCR / CV         payload DLL
- HP, minimap,     AOB scan → read
- loot, UI         HP, coords, mobs
-          │                │
-          └────────┬────────┘
-                   ▼
-     [src/capture/capture_service.py]
-     unified GameState (any mode)
-                   │
-                   ▼
-         [src/logic/]          ← FSM, A*, combat, loot
-                   │
-         [src/input/]          ← humanized SendInput
-                   │
-         [cpp/input/]          ← Bezier + jitter DLL
++─────────────────────────────────────────────────────────────────────────────+
+|                          ВЫДЕЛЕННЫЙ СЕРВЕР (ФЕРМА)                          |
+|                                                                             |
+|  [PoE2 Client 1 (PID 1024)]      [PoE2 Client 2 (PID 2048)]      ...N окон  |
+|    (Zero-Render)                   (Zero-Render)                            |
+|          │                               │                                  |
+|   poe2_payload.dll                poe2_payload.dll                          |
+|   (No-CRT / Stealth)              (No-CRT / Stealth)                        |
+|          │ 30 Hz updates                 │ 30 Hz updates                    |
+|          ▼                               ▼                                  |
+|  [Local\poe2_gs_1024]            [Local\poe2_gs_2048]            ..._pid    |
+|          ▲                               ▲                                  |
+|          │ zero-copy (<1ms)              │ zero-copy (<1ms)                 |
+|  ┌───────┴───────────────────────────────┴───────────────────────────────┐  |
+|  │                        PYTHON APPLICATION                             │  |
+|  │                                                                       │  |
+|  │  BridgeRegistry ──► [InternalBridge 1]     [InternalBridge 2]  ...[N] │  |
+|  │                             │                      │                  │  |
+|  │                             ▼                      ▼                  │  |
+|  │  Orchestrator   ──► [Bot FSM 1]            [Bot FSM 2]         ...[N] │  |
+|  │                             │                      │                  │  |
+|  │                             ▼                      ▼                  │  |
+|  │  Humanized Input ─► [Input Service 1]      [Input Service 2]   ...[N] │  |
+|  └───────────────────────────────────────────────────────────────────────┘  |
++─────────────────────────────────────────────────────────────────────────────+
 ```
-
-**Подробнее:** [`docs/architecture/overview.md`](docs/architecture/overview.md)
 
 ---
 
-## Стек технологий
+## Стек компонентов
 
-| Компонент | Технология | Причина выбора |
-|-----------|-----------|----------------|
-| **Screen Capture** | C++ / DXGI Desktop Duplication API | Захватывает compositor напрямую, минимальный след, ~1ms latency |
-| **Vision Core** | Python 3.12 + OpenCV 4.x | Богатые CV-примитивы, шаблонный матчинг, HSV-маски |
-| **OCR** | Tesseract 5 + pytesseract | Открытый, настраивается под шрифт PoE2 |
-| **Input Emulation** | C++ DLL / SendInput + humanizer | Гибкость + возможность апгрейда на KMBox/driver |
-| **FSM / Logic** | Python + transitions | Читаемые состояния, легко отлаживать |
-| **Config** | TOML (tomllib stdlib) | Читаемый, строго типизированный |
-| **Async loop** | asyncio | Неблокирующий main loop |
-| **Build** | uv + pyproject.toml | Быстрый пакетный менеджер |
-| **Tests** | pytest + pytest-asyncio | Стандарт |
+### C++20 / MASM Core (`cpp/`)
+1. **Manual Map Loader (`cpp/loader/mapper.cpp`):**
+   - Прямые системные вызовы (Hell's Gate + Halo's Gate) для обхода перехватов EDR/anticheat.
+   - Затирка заголовков PE (MZ magic) в целевой памяти.
+   - Запуск потока через `NtCreateThreadEx` с `THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER`.
+   - Изоляция по PID/Instance ID.
+2. **Stealth Payload (`cpp/internal/payload.cpp`):**
+   - Zero-CRT (`/NODEFAULTLIB`), ручной EAT/PEB walk по djb2-хэшам.
+   - Защищенное чтение памяти (SEH `__try / __except`).
+   - AOB pattern scanning базовых структур GameState.
+   - Обновление состояния в shared memory с частотой 30 Hz.
+3. **Shared Memory Protocol (`cpp/common/game_state.h`):**
+   - Двоичный POD-пакет `GameStatePacket` (64 КБ, заголовок с `magic = 0x504F4532`).
+   - Имя сегмента: `Local\poe2_gs_<instance_id>`.
+4. **Humanized Input DLL (`cpp/input/`):**
+   - Кривые Безье, гауссов джиттер, микропаузы между нажатиями.
+
+### Python Orchestrator (`src/`)
+1. **`src/capture/internal_bridge.py`:** Zero-copy чтение shm через модуль `mmap`, `BridgeRegistry` для N инстансов.
+2. **`src/capture/capture_service.py`:** Единый фасад `CaptureService` + фабрика `make_services_for_pids()`.
+3. **`src/analyzers/`:** Чистые функции оценки модов карты, выбора наград и минимизации дебафов (100% in-memory тесты).
+4. **`src/logic/`:** Машина состояний (FSM), навигация по точным координатам, combat loop, лут-фильтр.
+5. **`src/config/`:** Строгие Pydantic v2 схемы TOML-конфигураций.
 
 ---
 
-## Структура проекта
+## Сравнение режимов: Internal vs Legacy OCR
 
-```
-poe2-bot/
-├── src/
-│   ├── capture/
-│   │   ├── capture.py            # Python-обёртка над C++ DXGI DLL
-│   │   ├── capture_service.py    # Unified GameState (external|internal|hybrid)
-│   │   └── internal_bridge.py    # Shared memory reader (internal mode)
-│   ├── vision/           # OpenCV: HP, minimap, loot, UI
-│   │   ├── ocr.py
-│   │   ├── minimap.py
-│   │   ├── loot_scanner.py
-│   │   └── ui_parser.py
-│   ├── analyzers/        # Логика принятия решений
-│   │   ├── mod_analyzer.py
-│   │   ├── reward_picker.py
-│   │   └── debuff_picker.py
-│   ├── logic/            # FSM, навигация, combat
-│   │   ├── fsm.py
-│   │   ├── pathfinding.py
-│   │   ├── combat.py
-│   │   └── loot_filter.py
-│   ├── input/            # Humanized input
-│   │   ├── mouse.py
-│   │   └── keyboard.py
-│   ├── stash/            # Stash management
-│   │   └── manager.py
-│   └── config/           # Config loader + validator
-│       ├── loader.py
-│       └── schema.py
-├── cpp/
-│   ├── capture/          # DXGI Desktop Duplication DLL
-│   ├── input/            # Humanized input DLL (Bezier + jitter)
-│   ├── loader/           # Manual map loader (direct syscalls, no PEB trace)
-│   └── internal/         # Payload DLL (AOB scan, shared memory writer)
-├── configs/
-│   ├── build_configs/
-│   │   └── lightning_arrow.toml
-│   ├── mod_database.toml
-│   ├── reward_priorities.toml
-│   ├── debuff_weights.toml
-│   └── loot_filter.toml
-├── docs/
-│   ├── adr/              # Architecture Decision Records
-│   └── architecture/     # Диаграммы и описание системы
-├── tests/
-│   ├── unit/
-│   └── integration/
-├── tools/
-│   ├── calibrator/       # UI-координаты после патчей PoE2
-│   ├── ocr_trainer/      # Дообучение OCR под шрифт
-│   └── mod_recorder/     # Запись новых модов в базу
-├── AGENTS.md
-├── pyproject.toml
-└── .gitignore
-```
+| Критерий | Internal Mode (SSOT) | Legacy External (OCR / DXGI) |
+|---|---|---|
+| **Плотность на сервер** | **100+ параллельных ботов** | 2-4 окна максимум (упирается в GPU) |
+| **Рендер графики** | **Не требуется (Zero-Render)** | Обязателен (3D, шрифты, окна) |
+| **Нагрузка CPU на бота** | **< 0.5% одного потока** | 15-30% от ядра CPU |
+| **Задержка чтения данных** | **< 1 ms (direct memory snapshot)** | 20-40 ms (захват кадра + OCR) |
+| **Координаты и монстры** | **Точные float (x, y, z) + точное HP** | Приблизительные пиксельные пятна |
+| **Статус** | **ОСНОВНОЙ (SSOT)** | **Deprecated / Fallback** |
 
 ---
 
 ## Быстрый старт
 
 ### Требования
+- Windows 10/11 x64 или Windows Server 2022/2025 x64
+- Visual Studio Build Tools 2022 (MSVC x64 + MASM)
+- Python 3.12+ и [uv](https://github.com/astral-sh/uv)
+- CMake 3.20+
 
-- Python 3.12+
-- [uv](https://github.com/astral-sh/uv)
-- Tesseract 5 (в PATH)
-- Visual Studio Build Tools 2022 (для C++ DLL)
-- Windows 10/11 x64
-
-### Установка
-
+### Сборка C++ компонентов
 ```bash
-# Клонировать
-git clone https://github.com/<owner>/poe2-bot
-cd poe2-bot
-
-# Создать окружение и установить зависимости
-uv sync
-
-# Собрать C++ DLL
-cmake -B build/cpp cpp/ -DCMAKE_BUILD_TYPE=Release
-cmake --build build/cpp --config Release
-
-# Откалибровать UI (запустить PoE2 на нужном разрешении)
-uv run python tools/calibrator/calibrate.py
+# Сборка poe2_loader.exe и poe2_payload.dll
+cmake -B cpp/build cpp/ -DCMAKE_BUILD_TYPE=Release
+cmake --build cpp/build --config Release
 ```
 
-### Запуск
+Артефакты появятся в `cpp/build/Release/`:
+- `poe2_loader.exe` — консольный инжектор
+- `poe2_payload.dll` — stealth no-CRT библиотека
 
+### Запуск одного инстанса
 ```bash
-# Запустить с билд-конфигом
+# Запуск бота с автоматическим обнаружением процесса игры
 uv run python -m poe2bot --build configs/build_configs/lightning_arrow.toml
 
-# Dry-run (только анализ, без ввода)
-uv run python -m poe2bot --build configs/build_configs/lightning_arrow.toml --dry-run
+# Запуск с явным указанием PID клиента
+uv run python -m poe2bot --build configs/build_configs/lightning_arrow.toml --pid 12345
+```
 
-# Только анализ модов (не запускать цикл)
-uv run python -m poe2bot --analyze-only
+### Запуск серверной фермы на N окон
+```python
+from src.capture.capture_service import make_services_for_pids
+
+# Список PID запущенных клиентов PoE2
+pids = [1024, 2048, 4096, 8192]
+
+# Подключение ко всем процессам (автоинжект + открытие shm)
+services = make_services_for_pids(pids)
+
+for svc in services:
+    state = svc.read_state()
+    print(f"[{state.instance_id}] HP: {state.hp}/{state.hp_max} | Monsters: {len(state.monsters)}")
 ```
 
 ---
 
-## Конфигурация
-
-### build_config.toml — главный файл
-
-Все поведения бота диктует конфиг билда:
+## Конфигурация (`configs/build_configs/lightning_arrow.toml`)
 
 ```toml
+[bot]
+mode = "internal"           # "internal" (SSOT) | "external" (legacy fallback)
+poe2_pid = 0                # 0 = автоопределение через psutil
+instance_id = 0             # 0 = использовать poe2_pid
+inject_delay_s = 5.0        # задержка перед инжектом
+loader_path = "cpp/build/Release/poe2_loader.exe"
+payload_path = "cpp/build/Release/poe2_payload.dll"
+
 [character]
 name = "Lightning Arrow Deadeye"
 class = "Ranger"
+ascendancy = "Deadeye"
+level = 95
 
 [damage]
 primary_type = "lightning"
 secondary_type = "physical"
-has_fire = false
-has_cold = false
 
-[defense]
-leech_dependent = false
-regen_dependent = true
-flask_dependent = true
-
-[stat_priorities]
-crit_chance = 90
-attack_speed = 80
-lightning_damage = 95
-
-[skill_rotation]
-main_skill = "Lightning Arrow"
-movement = "Dash"
-curse = "Conductivity"
-cooldowns = { Dash = 500, Conductivity = 4000 }
+[potions]
+life_flask_threshold = 0.60
+mana_flask_threshold = 0.30
 ```
 
-### mod_database.toml
-
-База модов с категориями и весами. Подробнее: [`docs/architecture/mod_system.md`](docs/architecture/mod_system.md)
-
 ---
 
-## Модули
-
-| Модуль | Описание | Документация |
-|--------|---------|-------------|
-| Mod Analyzer | Оценка модов карты, решение skip/run | [`docs/architecture/mod_system.md`](docs/architecture/mod_system.md) |
-| Reward Picker | Выбор наград под билд | В разработке |
-| Room Navigator | A* навигация по минимапу | В разработке |
-| Loot Filter | Смарт-подбор лута | В разработке |
-| Humanizer | Bezier curves, jitter, паузы | В разработке |
-
----
-
-## Разработка
+## Разработка и тестирование
 
 ```bash
-# Линт
+# Проверка качества кода
 uv run ruff check src/
-
-# Форматирование
 uv run ruff format src/
-
-# Типы
 uv run mypy src/
 
-# Тесты
-uv run pytest tests/
-```
-
----
-
-## Тестирование
-
-```bash
-# Все тесты
-uv run pytest
-
-# Только unit
+# Запуск unit-тестов
 uv run pytest tests/unit/
-
-# С покрытием
-uv run pytest --cov=src --cov-report=html
 ```
 
 ---
 
-## Безопасность
+## Архитектурные решения (ADR)
 
-**External mode (default):**
-- Бот **не инжектирует** код в процесс PoE2
-- Бот **не читает память** процесса PoE2
-- Все взаимодействия — screen capture + SendInput
-
-**Internal mode (opt-in):**
-- Manual-mapped DLL без следов в PEB module list
-- Только **read** из памяти процесса, никаких write в игровую логику
-- Данные передаются через named shared memory → Python, нет прямой связи
-- Direct syscalls (Hell's Gate), затёртый PE-заголовок, нет экспортов
-
-**Общее:**
-- Humanizer минимизирует детектируемость паттернов ввода
-- Используй на своё усмотрение
-
-**Использование бота нарушает ToS GGG. Ответственность за последствия несёт пользователь.**
-
----
-
-## ADR
-
-| ID | Название |
-|----|---------|
-| [ADR-0001](docs/adr/ADR-0001-external-architecture.md) | Выбор External-архитектуры |
-| [ADR-0002](docs/adr/ADR-0002-python-cpp-split.md) | Python + C++ DLL разделение |
-| [ADR-0003](docs/adr/ADR-0003-pixel-based-vision.md) | Pixel-based вместо memory reading |
-| [ADR-0004](docs/adr/ADR-0004-internal-mode-manual-map.md) | Internal mode — manual map + shared memory IPC |
+- [ADR-0004: Internal Mode — Manual Map Injection & Headless GameState](docs/adr/ADR-0004-internal-mode-manual-map.md) — **Действующий SSOT**
+- [ADR-0001: Выбор архитектуры и эволюция к фермам](docs/adr/ADR-0001-external-architecture.md)
+- [ADR-0002: Python + C++ разделение](docs/adr/ADR-0002-python-cpp-split.md)
+- [ADR-0003: Pixel-based vision (Deprecated)](docs/adr/ADR-0003-pixel-based-vision.md)
+- [Системный обзор архитектуры](docs/architecture/overview.md)
+- [Дорожная карта ферм](docs/roadmap.md)

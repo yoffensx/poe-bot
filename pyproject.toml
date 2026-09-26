@@ -1,34 +1,26 @@
 [project]
 name = "poe2-bot"
 version = "0.1.0"
-description = "Path of Exile 2 — Smart External Map Runner Bot"
+description = "Path of Exile 2 — High-Performance Internal Headless Bot Farm"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
+dependencies = [
+    "opencv-python>=4.10.0",
+    "pytesseract>=0.3.13",
+    "numpy>=2.0.0",
+    "pillow>=10.4.0",
+    "tomli>=2.0.2",
+    "pydantic>=2.9.0",
+    "transitions>=0.9.2",
+    "anyio>=4.6.0",
+    "loguru>=0.7.2",
+    "rich>=13.9.0",
+]
 
 [project.scripts]
-poe2bot = "poe2bot.__main__:main"
+poe2bot = "src.__main__:main"
 
-[project.dependencies]
-# Vision
-opencv-python = ">=4.10.0"
-pytesseract = ">=0.3.13"
-numpy = ">=2.0.0"
-pillow = ">=10.4.0"
-
-# Config
-tomli = ">=2.0.2"  # fallback если python < 3.11
-pydantic = ">=2.9.0"
-
-# FSM
-transitions = ">=0.9.2"
-
-# Async
-anyio = ">=4.6.0"
-
-# Utils
-loguru = ">=0.7.2"
-rich = ">=13.9.0"  # CLI output
 
 [dependency-groups]
 dev = [
@@ -65,8 +57,9 @@ select = [
     "RUF", # ruff-specific
 ]
 ignore = [
-    "ANN101",  # self annotation
-    "ANN102",  # cls annotation
+    "RUF001",  # ambiguous unicode in string
+    "RUF002",  # ambiguous unicode in docstring
+    "RUF003",  # ambiguous unicode in comment
 ]
 
 [tool.ruff.lint.per-file-ignores]

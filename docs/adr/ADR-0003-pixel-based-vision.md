@@ -1,97 +1,20 @@
-# ADR-0003: Pixel-based Vision (нет Memory Reading)
+# ADR-0003: Pixel-based Vision (DEPRECATED / LEGACY FALLBACK)
 
-- **Статус:** Принято
-- **Дата:** 2026-09-26
+- **Статус:** Deprecated (Устарело, переведено в резервный fallback)
+- **Дата обновления:** 2026-09-27
+- **Первоначальная дата:** 2026-09-26
 - **Авторы:** Maik
 
 ---
 
-## Контекст
+## Статус решения
 
-Для принятия решений бот должен знать состояние игры:
-- Текущие HP/MP/ES
-- Моды карты (текст аффиксов)
-- Позиция на минимапе, враги
-- Содержимое инвентаря и лута
-- Текущий экран (reward, debuff, map screen, town, etc.)
+Данное решение **признано неэффективным для боевой эксплуатации на серверных фермах** и переведено в статус устаревшего (Deprecated).
 
-Два способа получить эти данные:
-1. **Memory reading** — `ReadProcessMemory` к структурам PoE2
-2. **Pixel-based** — OCR и CV на захваченных кадрах
+**Причина депрекации:**
+Pixel-based подход (DXGI захват экрана + Tesseract OCR + OpenCV) принципиально требует рендера графики клиентом игры и загружает GPU и CPU. Это делает невозможным запуск сотен инстансов бота на одном сервере.
 
-## Решение
+**Действующий стандарт:**
+Основной и приоритетный способ получения данных об игре зафиксирован в [ADR-0004: Internal Mode — Manual Map Injection & Headless GameState](ADR-0004-internal-mode-manual-map.md).
 
-**Строго pixel-based** — никакого чтения памяти процесса `PathOfExile2.exe`.
-
-### Что читаем из пикселей
-
-| Игровой элемент | Метод |
-|----------------|-------|
-| HP/MP/ES орбы | HSV маска → процент заполнения |
-| Текст модов карты | Tesseract OCR (whitelist: латиница + цифры + %) |
-| Minimap: позиция | Белая точка игрока на минимапе |
-| Minimap: враги | Красные/оранжевые точки |
-| Minimap: unexplored | Тёмные области с характерным паттерном |
-| Лут на земле | Alt → OCR имён; цвет рамки → редкость |
-| Инвентарь | Сетка 12×5, template matching по иконкам |
-| Экраны UI | Детект характерных элементов (заголовки, кнопки) |
-| Skill cooldowns | Pixel-watch иконок скиллбара (затемнение = КД) |
-
-## Обоснование
-
-### Pixel-based: pros
-- **Нет `OpenProcess(PROCESS_VM_READ)`** — стандартная ban-wave trigger точка
-- **Не зависит от структур памяти PoE2** — патч игры не ломает бота (офсеты меняются)
-- **Работает через любой overlay** — захват compositor независим
-- **Юридически менее агрессивно** (в контексте ToS)
-
-### Pixel-based: cons
-- OCR может ошибаться при нестандартных шрифтах → решено: fine-tuning Tesseract под шрифт PoE2
-- Медленнее на слабом железе → решено: ROI-based OCR (не весь экран, только нужные области)
-- Не читает off-screen данные → окей: всё нужное видно на экране
-
-### Memory reading: почему отклонено
-- `OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION)` — триггер для integrity check
-- Структуры памяти меняются при каждом патче → постоянный реверс
-- GGG может добавить ring-0 protection → мгновенный брик бота
-
-## Реализация
-
-### ROI (Region of Interest) система
-
-Бот работает не с полным кадром, а с заранее определёнными ROI:
-
-```python
-# configs/ui_regions.toml  (генерируется calibrator'ом)
-[regions]
-hp_orb = { x=48, y=938, w=120, h=120 }
-mp_orb = { x=1752, y=938, w=120, h=120 }
-minimap = { x=1600, y=20, w=320, h=320 }
-skill_bar = { x=600, y=1010, w=720, h=60 }
-map_mods_text = { x=300, y=200, w=800, h=600 }
-```
-
-Calibrator запускается после каждого патча, меняющего UI.
-
-### OCR pipeline
-
-```
-ROI crop → grayscale → threshold (adaptive) → Tesseract → regex clean → match DB
-```
-
-Tesseract конфигурация:
-- `--psm 6` (block of text) для списков модов
-- `--psm 7` (single line) для имён итемов
-- Whitelist: `ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789%+-(),'`
-
-## Последствия
-
-- Нужен `tools/calibrator/` для настройки ROI после патчей
-- Нужен `tools/ocr_trainer/` для fine-tuning Tesseract под шрифт PoE2
-- Frame processing pipeline должен укладываться в < 33ms
-- Тесты OCR accuracy на реальных скриншотах PoE2
-
-## Связанные ADR
-
-- ADR-0001: External architecture
-- ADR-0002: Python + C++ DLL split
+Код `src/vision/` сохраняется исключительно для локальной отладки или единичных тестов при отсутствии внедрения. В production-фермах рендер отключается, а захват пикселей не используется.
