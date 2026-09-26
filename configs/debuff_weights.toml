@@ -1,0 +1,60 @@
+# pain_score: 0-100 (выше = больнее / опаснее для выживания)
+# condition: если указан — оценивать боль только при этом условии
+
+[[debuffs]]
+pattern = "Reduced Movement Speed"
+pain_score = 15
+
+[[debuffs]]
+pattern = "Reduced Life Recovery"
+pain_score = 35
+
+[[debuffs]]
+pattern = "Reduced Mana Recovery"
+pain_score = 25
+
+[[debuffs]]
+pattern = "Cannot use Life Flasks"
+pain_score = 70
+condition = "flask_dependent == true"
+
+[[debuffs]]
+pattern = "Cannot use Mana Flasks"
+pain_score = 50
+condition = "mana_flask_threshold > 0"
+
+[[debuffs]]
+pattern = "Monsters deal additional Fire Damage"
+pain_score = 30
+condition = "fire_res < 50"
+
+[[debuffs]]
+pattern = "Monsters deal additional Cold Damage"
+pain_score = 30
+condition = "cold_res < 50"
+
+[[debuffs]]
+pattern = "Monsters deal additional Lightning Damage"
+pain_score = 30
+condition = "lightning_res < 50"
+
+[[debuffs]]
+pattern = "Monsters deal additional Chaos Damage"
+pain_score = 50
+condition = "chaos_res < 30"
+
+[[debuffs]]
+pattern = "Monsters have increased Crit Chance"
+pain_score = 35
+
+[[debuffs]]
+pattern = "Reduced Flask Effect"
+pain_score = 20
+condition = "flask_dependent == true"
+
+# ─────────────────────────────────────────────
+# Алгоритм: выбираем debuff с MIN pain_score
+# ─────────────────────────────────────────────
+[selection]
+strategy = "min_pain"   # min_pain | random | first
+max_acceptable_pain = 80  # если все дебафы > 80 → log warning

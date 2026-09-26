@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.venv/
+.env
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# C++ build
+build/
+*.dll
+*.pdb
+*.lib
+*.obj
+*.exp
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# IDE
+.idea/
+.vscode/
+*.suo
+*.user
+*.sln.docview
+
+# Logs / runtime
+logs/
+*.log
+screenshots/
+frames/
+
+# Configs with secrets (не коммитить)
+configs/ui_regions.toml
+
+# OS
+Thumbs.db
+.DS_Store

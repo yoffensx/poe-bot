@@ -1,0 +1,92 @@
+[character]
+name = "Lightning Arrow Deadeye"
+class = "Ranger"
+ascendancy = "Deadeye"
+level = 95
+
+# ─────────────────────────────────────────────
+# Тип урона (влияет на оценку иммунити-модов)
+# ─────────────────────────────────────────────
+[damage]
+primary_type = "lightning"     # primary_type → иммунити = SKIP
+secondary_type = "physical"
+has_fire = false
+has_cold = false
+has_chaos = false
+
+# ─────────────────────────────────────────────
+# Защита (влияет на оценку "болезненных" модов)
+# ─────────────────────────────────────────────
+[defense]
+leech_dependent = false        # Cannot Leech → SKIP если true
+mana_leech_dependent = false
+regen_dependent = false        # No Regen → SKIP если true
+flask_dependent = true         # No Flasks → high pain score
+es_build = false               # ES builds доп. уязвимы к некоторым модам
+
+# Резисты (влияет на оценку elemental damage модов)
+[defense.resistances]
+fire = 75
+cold = 75
+lightning = 75
+chaos = 30
+
+# ─────────────────────────────────────────────
+# Минимальный скор карты для запуска (0 = не фильтруем)
+# ─────────────────────────────────────────────
+[map_filter]
+min_score = -30     # карты с суммарным скором ниже -30 → SKIP
+max_danger_mods = 2 # максимум BAD модов без скипа
+
+# ─────────────────────────────────────────────
+# Приоритеты статов для лут-фильтра
+# (0-100, выше = важнее)
+# ─────────────────────────────────────────────
+[stat_priorities]
+crit_chance = 90
+crit_multiplier = 85
+attack_speed = 80
+lightning_damage = 95
+flat_phys = 60
+flat_lightning = 70
+increased_damage = 55
+life = 75
+energy_shield = 30
+movement_speed = 70
+resistances = 65
+
+# ─────────────────────────────────────────────
+# Ротация скиллов
+# ─────────────────────────────────────────────
+[skill_rotation]
+main_skill = "Lightning Arrow"
+movement = "Dash"
+curse = "Conductivity"
+buff = "Herald of Thunder"
+
+[skill_rotation.cooldowns]  # milliseconds
+Dash = 500
+Conductivity = 4000
+"Herald of Thunder" = 0  # toggle, no cd
+
+[skill_rotation.hotkeys]
+main_skill = "1"
+movement = "e"
+curse = "3"
+flask_life = "q"
+flask_mana = "w"
+
+# ─────────────────────────────────────────────
+# Поушн-триггеры
+# ─────────────────────────────────────────────
+[potions]
+life_flask_threshold = 0.60   # использовать при HP < 60%
+mana_flask_threshold = 0.30
+es_flask_threshold = 0.50
+
+# ─────────────────────────────────────────────
+# Теги для reward_priorities.toml
+# (какие нагрды важны под этот билд)
+# ─────────────────────────────────────────────
+[build_tags]
+tags = ["bow", "projectile", "lightning", "crit", "attack"]

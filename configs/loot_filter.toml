@@ -1,0 +1,131 @@
+# loot_filter.toml
+# Правила подбора лута. Обрабатываются сверху вниз — первое совпадение побеждает.
+
+# ─────────────────────────────────────────────
+# ВСЕГДА подбираем (currency, uniques)
+# ─────────────────────────────────────────────
+[[rules]]
+name = "always_currency"
+action = "PICKUP"
+conditions = [
+    { field = "rarity", op = "eq", value = "currency" },
+]
+priority = 1000
+
+[[rules]]
+name = "high_value_currency"
+action = "PICKUP"
+conditions = [
+    { field = "name", op = "contains_any", value = [
+        "Divine Orb", "Mirror of Kalandra", "Exalted Orb",
+        "Orb of Annulment", "Chaos Orb", "Vaal Orb",
+        "Orb of Alchemy", "Orb of Fusing",
+        "Jeweller's Orb", "Chromatic Orb"
+    ] },
+]
+priority = 999
+
+[[rules]]
+name = "unique_items"
+action = "PICKUP"
+conditions = [
+    { field = "rarity", op = "eq", value = "unique" },
+]
+priority = 990
+
+# ─────────────────────────────────────────────
+# Jewels — всегда подбираем (мало места, высокая ценность)
+# ─────────────────────────────────────────────
+[[rules]]
+name = "jewels_rare"
+action = "PICKUP"
+conditions = [
+    { field = "item_class", op = "eq", value = "Jewel" },
+    { field = "rarity", op = "in", value = ["rare", "unique"] },
+]
+priority = 980
+
+[[rules]]
+name = "abyss_jewels"
+action = "PICKUP"
+conditions = [
+    { field = "item_class", op = "eq", value = "AbyssJewel" },
+    { field = "rarity", op = "in", value = ["rare", "unique"] },
+]
+priority = 975
+
+# ─────────────────────────────────────────────
+# Ценные базы оружия/брони для крафта
+# ─────────────────────────────────────────────
+[[rules]]
+name = "valuable_bow_bases"
+action = "PICKUP"
+conditions = [
+    { field = "item_class", op = "eq", value = "Bow" },
+    { field = "rarity", op = "in", value = ["rare", "unique"] },
+    { field = "base_name", op = "contains_any", value = [
+        "Spine Bow", "Harbinger Bow", "Maraketh Bow",
+        "Citadel Bow", "Assassin's Bow"
+    ] },
+]
+priority = 950
+build_tags = ["bow", "attack"]
+
+[[rules]]
+name = "rare_helmets"
+action = "PICKUP"
+conditions = [
+    { field = "item_class", op = "eq", value = "Helmet" },
+    { field = "rarity", op = "eq", value = "rare" },
+]
+priority = 800
+
+[[rules]]
+name = "rare_boots_gloves"
+action = "PICKUP"
+conditions = [
+    { field = "item_class", op = "in", value = ["Boots", "Gloves"] },
+    { field = "rarity", op = "eq", value = "rare" },
+]
+priority = 790
+
+# ─────────────────────────────────────────────
+# Maps (waystone) — всегда
+# ─────────────────────────────────────────────
+[[rules]]
+name = "maps"
+action = "PICKUP"
+conditions = [
+    { field = "item_class", op = "eq", value = "Map" },
+]
+priority = 900
+
+# ─────────────────────────────────────────────
+# Flasks — только высокое качество / уникальные
+# ─────────────────────────────────────────────
+[[rules]]
+name = "unique_flasks"
+action = "PICKUP"
+conditions = [
+    { field = "item_class", op = "contains", value = "Flask" },
+    { field = "rarity", op = "eq", value = "unique" },
+]
+priority = 850
+
+# ─────────────────────────────────────────────
+# SKIP — мусор
+# ─────────────────────────────────────────────
+[[rules]]
+name = "skip_normal_magic"
+action = "SKIP"
+conditions = [
+    { field = "rarity", op = "in", value = ["normal", "magic"] },
+]
+priority = 100
+
+# ─────────────────────────────────────────────
+# Default
+# ─────────────────────────────────────────────
+[defaults]
+unmatched_action = "SKIP"    # что делать если ни одно правило не сработало
+alt_quality_pickup = false   # подбирать ли alternate quality items

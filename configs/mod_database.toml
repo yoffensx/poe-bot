@@ -1,0 +1,177 @@
+# mod_database.toml
+# База аффиксов карт PoE2.
+# category: LETHAL | BAD | NEUTRAL | GOOD | BUILD_SPECIFIC
+# action:   SKIP | SKIP_IF_CONDITION | ALLOW
+# weight:   int (отрицательный = плохо, положительный = хорошо)
+
+# ─────────────────────────────────────────────
+# LETHAL — всегда пропускаем, независимо от билда
+# ─────────────────────────────────────────────
+[[mods]]
+pattern = "Players cannot Regenerate Life, Mana or Energy Shield"
+category = "LETHAL"
+action = "SKIP"
+reason = "no_regen_kills_most_builds"
+
+[[mods]]
+pattern = "of Monsters reflect % of Physical Damage"
+category = "LETHAL"
+action = "SKIP"
+reason = "phys_reflect_oneshot"
+
+[[mods]]
+pattern = "of Monsters reflect % of Elemental Damage"
+category = "LETHAL"
+action = "SKIP"
+reason = "ele_reflect_oneshot"
+
+[[mods]]
+pattern = "Players have no Mana"
+category = "LETHAL"
+action = "SKIP"
+reason = "no_mana"
+
+# ─────────────────────────────────────────────
+# BUILD_SPECIFIC — зависит от конфига билда
+# ─────────────────────────────────────────────
+[[mods]]
+pattern = "Monsters are Immune to Fire Damage"
+category = "BUILD_SPECIFIC"
+action = "SKIP_IF_CONDITION"
+condition = "primary_damage_type == 'fire'"
+weight = -100
+
+[[mods]]
+pattern = "Monsters are Immune to Cold Damage"
+category = "BUILD_SPECIFIC"
+action = "SKIP_IF_CONDITION"
+condition = "primary_damage_type == 'cold'"
+weight = -100
+
+[[mods]]
+pattern = "Monsters are Immune to Lightning Damage"
+category = "BUILD_SPECIFIC"
+action = "SKIP_IF_CONDITION"
+condition = "primary_damage_type == 'lightning'"
+weight = -100
+
+[[mods]]
+pattern = "Monsters are Immune to Physical Damage"
+category = "BUILD_SPECIFIC"
+action = "SKIP_IF_CONDITION"
+condition = "primary_damage_type == 'physical'"
+weight = -100
+
+[[mods]]
+pattern = "Cannot Leech Life from Monsters"
+category = "BUILD_SPECIFIC"
+action = "SKIP_IF_CONDITION"
+condition = "leech_dependent == true"
+weight = -80
+
+[[mods]]
+pattern = "Cannot Leech Mana from Monsters"
+category = "BUILD_SPECIFIC"
+action = "SKIP_IF_CONDITION"
+condition = "mana_leech_dependent == true"
+weight = -60
+
+[[mods]]
+pattern = "Players cannot use Flasks"
+category = "BUILD_SPECIFIC"
+action = "SKIP_IF_CONDITION"
+condition = "flask_dependent == true"
+weight = -70
+
+# ─────────────────────────────────────────────
+# BAD — штраф к скору, но не обязательный скип
+# ─────────────────────────────────────────────
+[[mods]]
+pattern = "Monsters have % increased Critical Strike Chance"
+category = "BAD"
+action = "ALLOW"
+weight = -25
+
+[[mods]]
+pattern = "Monsters deal % extra damage as Cold"
+category = "BAD"
+action = "ALLOW"
+weight = -20
+
+[[mods]]
+pattern = "Monsters deal % extra damage as Fire"
+category = "BAD"
+action = "ALLOW"
+weight = -20
+
+[[mods]]
+pattern = "Monsters deal % extra damage as Lightning"
+category = "BAD"
+action = "ALLOW"
+weight = -20
+
+[[mods]]
+pattern = "Monsters have % increased Attack Speed"
+category = "BAD"
+action = "ALLOW"
+weight = -15
+
+[[mods]]
+pattern = "Monsters have % increased Cast Speed"
+category = "BAD"
+action = "ALLOW"
+weight = -15
+
+[[mods]]
+pattern = "Monsters have % more Life"
+category = "BAD"
+action = "ALLOW"
+weight = -10
+
+[[mods]]
+pattern = "Monsters Hinder on Hit"
+category = "BAD"
+action = "ALLOW"
+weight = -20
+
+# ─────────────────────────────────────────────
+# GOOD — бонус к скору (больше дроп / опыт)
+# ─────────────────────────────────────────────
+[[mods]]
+pattern = "% increased Quantity of Items found"
+category = "GOOD"
+action = "ALLOW"
+weight = +50
+
+[[mods]]
+pattern = "% increased Rarity of Items found"
+category = "GOOD"
+action = "ALLOW"
+weight = +40
+
+[[mods]]
+pattern = "% more Monster Experience"
+category = "GOOD"
+action = "ALLOW"
+weight = +30
+
+[[mods]]
+pattern = "Area contains % more Rare Monsters"
+category = "GOOD"
+action = "ALLOW"
+weight = +35
+
+[[mods]]
+pattern = "Monsters are Possessed"
+category = "GOOD"
+action = "ALLOW"
+weight = +25
+
+# ─────────────────────────────────────────────
+# NEUTRAL — не влияет
+# ─────────────────────────────────────────────
+[[mods]]
+pattern = "Area has increased Monster variety"
+category = "NEUTRAL"
+action = "ALLOW"
+weight = 0

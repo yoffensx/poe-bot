@@ -1,0 +1,73 @@
+# priority: 0-100 (выше = важнее)
+# build_tags: если пусто — всегда ценно; если указаны — только для билдов с этим тегом
+
+[[rewards]]
+name = "Divine Orb"
+priority = 100
+build_tags = []
+
+[[rewards]]
+name = "Mirror of Kalandra"
+priority = 100
+build_tags = []
+
+[[rewards]]
+name = "Exalted Orb"
+priority = 90
+build_tags = []
+
+[[rewards]]
+name = "Chaos Orb"
+priority = 75
+build_tags = []
+
+[[rewards]]
+name = "Orb of Annulment"
+priority = 80
+build_tags = []
+
+[[rewards]]
+name = "Vaal Orb"
+priority = 65
+build_tags = []
+
+# ─────────────────────────────────────────────
+# Build-specific rewards
+# ─────────────────────────────────────────────
+[[rewards]]
+name = "Skill Gem"
+priority = 85
+build_tags = ["gem_stacker", "spell"]
+
+[[rewards]]
+name = "Jewel"
+priority = 70
+build_tags = ["crit", "attack", "bow"]
+
+[[rewards]]
+name = "Abyss Jewel"
+priority = 65
+build_tags = ["attack", "bow"]
+
+[[rewards]]
+name = "Map"
+priority = 60
+build_tags = []
+
+[[rewards]]
+name = "Equipment"
+priority = 30
+build_tags = []
+
+[[rewards]]
+name = "Flask"
+priority = 20
+build_tags = []
+
+# ─────────────────────────────────────────────
+# Если несколько совпадений — берём максимальный приоритет
+# Если ни одно не совпало — берём reward с наибольшим базовым priority
+# ─────────────────────────────────────────────
+[selection]
+prefer_currency_over_equipment = true
+tiebreak = "first"  # first | random
